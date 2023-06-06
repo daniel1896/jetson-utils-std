@@ -25,6 +25,7 @@
 #include "cudaMappedMemory.h"
 #include "cudaColorspace.h"
 #include "cudaNormalize.h"
+#include "cudaStdDev.h"
 #include "cudaOverlay.h"
 #include "cudaResize.h"
 #include "cudaCrop.h"
@@ -1405,6 +1406,7 @@ PyObject* PyCUDA_Normalize( PyObject* self, PyObject* args, PyObject* kwds )
 	
 	static char* kwlist[] = {"input", "inputRange", "output", "outputRange", NULL};
 
+	// jetson_utils.cudaNormalize(rgb_image, (0, 255), std_image, (0, 128))
 	if( !PyArg_ParseTupleAndKeywords(args, kwds, "O(ff)O(ff)", kwlist, &pyInput, &input_min, &input_max, &pyOutput, &output_min, &output_max))
 		return NULL;
 
@@ -1438,6 +1440,78 @@ PyObject* PyCUDA_Normalize( PyObject* self, PyObject* args, PyObject* kwds )
 	}
 
 	output->timestamp = input->timestamp;
+
+	// return void
+	Py_RETURN_NONE;
+}
+
+
+// PyCUDA_StdDev
+PyObject* PyCUDA_StdDev(PyObject* self, PyObject* args, PyObject* kwds)
+{
+	// jetson_utils.cudaStdDev(frame1, frame2, frame3, frame4, frame5, output, img_width, img_height)
+    // parse arguments
+	PyObject* pyInput1 = NULL;
+	PyObject* pyInput2 = NULL;
+	PyObject* pyInput3 = NULL;
+	PyObject* pyInput4 = NULL;
+	PyObject* pyInput5 = NULL;
+	PyObject* pyOutput = NULL;
+
+	int width, height;
+
+	static char* kwlist[] = {"input1", "input2", "input3", "input4", "input5", "output", "width", "height", NULL};
+
+	if( !PyArg_ParseTupleAndKeywords(args, kwds, "OOOOOOii", kwlist, &pyInput1, &pyInput2, &pyInput3, &pyInput4, &pyInput5, &pyOutput, &width, &height))
+		return NULL;
+
+	// get pointers to image data
+	PyCudaImage* input1 = PyCUDA_GetImage(pyInput1);
+	PyCudaImage* input2 = PyCUDA_GetImage(pyInput2);
+	PyCudaImage* input3 = PyCUDA_GetImage(pyInput3);
+	PyCudaImage* input4 = PyCUDA_GetImage(pyInput4);
+	PyCudaImage* input5 = PyCUDA_GetImage(pyInput5);
+	PyCudaImage* output = PyCUDA_GetImage(pyOutput);
+
+	imageFormat imgf;
+	int w, h;
+	PyCUDA_GetImage(pyOutput, &w, &h, &imgf);
+
+	// print images
+	// printf("input1: %p\n", input1);
+	// printf("input2: %p\n", input2);
+	// printf("input3: %p\n", input3);
+	// printf("input4: %p\n", input4);
+	// printf("input5: %p\n", input5);
+	// printf("output: %p\n", output);
+	// printf("format: %i, %i, %s\n", w, h, imageFormatToStr(imgf));
+
+	if( !input1 || !input2 || !input3 || !input4 || !input5 || !output )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaStdDev() failed to get input/output image pointers (should be cudaImage)");
+		return NULL;
+	}
+
+	if( input1->format != output->format || input2->format != output->format || input3->format != output->format || input4->format != output->format || input5->format != output->format )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaStdDev() input and output image formats are different");
+		return NULL;
+	}
+
+	if( input1->width != output->width || input1->height != output->height || input2->width != output->width || input2->height != output->height || input3->width != output->width || input3->height != output->height || input4->width != output->width || input4->height != output->height || input5->width != output->width || input5->height != output->height )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaStdDev() input and output image resolutions are different");
+		return NULL;
+	}
+
+	// run the CUDA function
+	if( CUDA_FAILED(cudaStdDev(input1->base.ptr, input2->base.ptr, input3->base.ptr, input4->base.ptr, input5->base.ptr, output->base.ptr, width, height)) )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_UTILS "cudaStdDev() failed");
+		return NULL;
+	}
+
+	output->timestamp = input1->timestamp;
 
 	// return void
 	Py_RETURN_NONE;
@@ -2054,6 +2128,7 @@ static PyMethodDef pyCUDA_Functions[] =
 	{ "cudaCrop", (PyCFunction)PyCUDA_Crop, METH_VARARGS|METH_KEYWORDS, "Crop an image on the GPU" },		
 	{ "cudaResize", (PyCFunction)PyCUDA_Resize, METH_VARARGS|METH_KEYWORDS, "Resize an image on the GPU" },
 	{ "cudaNormalize", (PyCFunction)PyCUDA_Normalize, METH_VARARGS|METH_KEYWORDS, "Normalize the pixel intensities of an image between two ranges" },
+	{ "cudaStdDev", (PyCFunction)PyCUDA_StdDev, METH_VARARGS|METH_KEYWORDS, "Compute the standard deviation of an image" },
 	{ "cudaOverlay", (PyCFunction)PyCUDA_Overlay, METH_VARARGS|METH_KEYWORDS, "Overlay the input image onto the composite output image at position (x,y)" },
 	{ "cudaDrawCircle", (PyCFunction)PyCUDA_DrawCircle, METH_VARARGS|METH_KEYWORDS, "Draw a circle with the specified radius and color centered at position (x,y)" },
 	{ "cudaDrawLine", (PyCFunction)PyCUDA_DrawLine, METH_VARARGS|METH_KEYWORDS, "Draw a line with the specified color and line width from (x1,y1) to (x2,y2)" },
